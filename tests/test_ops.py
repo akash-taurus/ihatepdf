@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import fitz
+import pytest
 from PIL import Image
 
 from core import ops
@@ -74,3 +76,49 @@ def test_encrypt_decrypt_watermark_compress():
 
     pn = ops.add_page_numbers(src, str(TMP / "pn.pdf"))
     assert ops.info(pn)["pages"] == 2
+
+
+def _watermark_alpha(path: str) -> float | None:
+    """Non-stroking alpha (the '/ca' ExtGState entry) written for the page."""
+    with fitz.open(path) as doc:
+        page = doc[0]
+        resource = doc.xref_get_key(page.xref, "Resources/ExtGState")[1]
+    match = re.search(r"/ca\s*([0-9.]+)", resource or "")
+    return float(match.group(1)) if match else None
+
+
+def test_watermark_opacity_is_actually_applied():
+    src = _make_pdf(TMP / "wm-op.pdf", 1, "base")
+    faint = ops.watermark_text(src, str(TMP / "wm-faint.pdf"), "DRAFT", opacity=0.4)
+    solid = ops.watermark_text(src, str(TMP / "wm-solid.pdf"), "DRAFT", opacity=1.0)
+
+    assert _watermark_alpha(faint) == pytest.approx(0.4, abs=0.01)
+    assert _watermark_alpha(solid) is None
+    with pytest.raises(ValueError, match="opacity"):
+        ops.watermark_text(src, str(TMP / "wm-zero.pdf"), "DRAFT", opacity=0)
+
+
+def test_reorder_supports_repeats_and_subsets():
+    src = _make_pdf(TMP / "reo-src.pdf", 3, "R")
+    duplicated = ops.reorder_pages(src, "2,2,1", str(TMP / "reo-dup.pdf"))
+    assert ops.info(duplicated)["pages"] == 3
+
+    subset = ops.reorder_pages(src, "3,1", str(TMP / "reo-sub.pdf"))
+    assert ops.info(subset)["pages"] == 2
+
+    with pytest.raises(ValueError):
+        ops.reorder_pages(src, "9", str(TMP / "reo-bad.pdf"))
+
+
+def test_operations_validate_their_input():
+    src = _make_pdf(TMP / "validate.pdf", 2, "V")
+    with pytest.raises(ValueError, match="angle"):
+        ops.rotate_pages(src, str(TMP / "v-rot.pdf"), 45)
+    with pytest.raises(ValueError, match="delete all pages"):
+        ops.delete_pages(src, "1-2", str(TMP / "v-del.pdf"))
+    with pytest.raises(ValueError, match="at least 2"):
+        ops.merge([src], str(TMP / "v-merge.pdf"))
+    with pytest.raises(ValueError):
+        ops.extract_pages(src, "7", str(TMP / "v-ext.pdf"))
+    with pytest.raises(FileNotFoundError):
+        ops.info(str(TMP / "does-not-exist.pdf"))

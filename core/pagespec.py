@@ -47,6 +47,44 @@ def parse_pagespec(spec: str | None, page_count: int) -> list[int]:
     return sorted(pages)
 
 
+def parse_order(spec: str, page_count: int) -> list[int]:
+    """Parse an explicit page order, preserving it exactly.
+
+    Unlike :func:`parse_pagespec` (which sorts and de-duplicates), this is for
+    reordering: ``"3,1,2"`` -> ``[2, 0, 1]`` and ``"5-3"`` -> ``[4, 3, 2]``.
+    A subset is allowed — only the listed pages are kept, in that order.
+
+    Raises:
+        ValueError on bad syntax or out-of-range pages.
+    """
+    if spec is None or str(spec).strip() == "":
+        raise ValueError("Empty page order")
+    order: list[int] = []
+    for part in str(spec).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            a, b = part.split("-", 1)
+            try:
+                start, end = int(a.strip()), int(b.strip())
+            except ValueError:
+                raise ValueError(f"Bad page range: {part!r}")
+            step = 1 if start <= end else -1
+            order.extend(range(start - 1, end - 1 + step, step))
+        else:
+            try:
+                order.append(int(part) - 1)
+            except ValueError:
+                raise ValueError(f"Bad page number: {part!r}")
+    if not order:
+        raise ValueError("Empty page order")
+    for p in order:
+        if p < 0 or p >= page_count:
+            raise ValueError(f"Page {p + 1} out of range (1-{page_count})")
+    return order
+
+
 def parse_ranges_for_split(spec: str | None, page_count: int) -> list[list[int]]:
     """Parse split spec into groups. "1-2,3-5" -> [[0,1],[2,3,4]]."""
     if spec is None or str(spec).strip() == "":

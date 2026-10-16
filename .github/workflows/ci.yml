@@ -7,8 +7,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
-    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+  # Core suite on both platforms. Optional backends (pyHanko, Tesseract,
+  # LibreOffice) and the GUI are absent here on purpose: their tests skip, so
+  # this job proves ihatepdf works with nothing but its runtime dependencies.
+  core:
+    name: core · ${{ matrix.os }} · py${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -24,8 +27,6 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      # Only the packages core/ops.py needs: the GUI (PySide6) is exercised
-      # manually, and skipping it keeps CI fast and headless-friendly.
       - name: Install dependencies
         run: pip install pymupdf pypdf Pillow pytest black
 
@@ -34,3 +35,48 @@ jobs:
 
       - name: Run tests
         run: pytest -q
+
+  # Optional signing backend, exercised for real (certificates are generated
+  # on the fly by the tests, nothing sensitive is stored in the repo).
+  optional:
+    name: optional backends
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt -r requirements-optional.txt
+
+      - name: Run tests
+        run: pytest -q
+
+  # The desktop app: PySide6 is a heavy download, so it gets its own job and
+  # runs headless via the offscreen Qt platform plugin.
+  gui:
+    name: desktop · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install pymupdf pypdf Pillow PySide6 pytest
+
+      - name: Run GUI tests (offscreen)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: pytest -q tests/test_gui.py tests/test_app_tools.py

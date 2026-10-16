@@ -20,7 +20,7 @@ try:
 except Exception:  # pragma: no cover
     _HAS_PYPDF = False
 
-from .pagespec import parse_pagespec, parse_ranges_for_split
+from .pagespec import parse_order, parse_pagespec, parse_ranges_for_split
 
 # ---------------------------------------------------------------- helpers
 
@@ -188,31 +188,18 @@ def rotate_pages(input_path: str, output_path: str, angle: int, pages: str | Non
 
 
 def reorder_pages(input_path: str, order: str, output_path: str) -> str:
-    """Reorder pages. order like "3,1,2" (1-indexed, must cover all pages exactly once
-    or a subset — subset keeps only listed pages in that order)."""
+    """Reorder pages. order like "3,1,2" (1-indexed, order preserved).
+
+    A subset is allowed — only the listed pages are kept, in that order. Pages
+    may also be repeated, which duplicates them.
+    """
     with fitz.open(input_path) as doc:
-        idxs = parse_pagespec(order, doc.page_count)
-        # parse_pagespec sorts; for reorder we need user order preserved:
-        raw: list[int] = []
-        for part in order.split(","):
-            part = part.strip()
-            if "-" in part:
-                a, b = part.split("-", 1)
-                s, e = int(a.strip()), int(b.strip())
-                step = 1 if s <= e else -1
-                raw.extend(p - 1 for p in range(s, e + step, step))
-            else:
-                raw.append(int(part) - 1)
-        for p in raw:
-            if p < 0 or p >= doc.page_count:
-                raise ValueError(f"Page {p + 1} out of range")
+        raw = parse_order(order, doc.page_count)
         _ensure_parent(output_path)
         with fitz.open() as out:
             for pno in raw:
                 out.insert_pdf(doc, from_page=pno, to_page=pno)
             out.save(output_path, garbage=4, deflate=True)
-    # silence unused var warning (idxs validated range already)
-    _ = idxs
     return output_path
 
 
@@ -373,6 +360,8 @@ def watermark_text(
         raise ValueError("watermark text is empty")
     if int(rotate) % 90 != 0:
         raise ValueError("watermark rotate must be a multiple of 90 (0/90/180/270)")
+    if not 0.0 < opacity <= 1.0:
+        raise ValueError("watermark opacity must be in (0, 1]")
     _ensure_parent(output_path)
     with fitz.open(input_path) as doc:
         targets = parse_pagespec(pages, doc.page_count)
@@ -380,7 +369,8 @@ def watermark_text(
             page = doc[pno]
             rect = page.rect
             cx, cy = rect.width / 2, rect.height / 2
-            # centered diagonal text via TextWriter on an overlay
+            # Rough horizontal centring: the built-in fonts are proportional, so
+            # estimate the text width from the size and character count.
             page.insert_text(
                 fitz.Point(cx - len(text) * fontsize * 0.28, cy),
                 text,
@@ -388,11 +378,8 @@ def watermark_text(
                 color=color,
                 rotate=rotate,
                 overlay=True,
+                fill_opacity=opacity,
             )
-            # apply opacity by wrapping new content in transparency group is complex;
-            # simplest portable approach: use a stamp annotation with opacity instead
-            # when opacity < 1. We already drew text; for low opacity redraw lighter:
-            _ = opacity
         doc.save(output_path, garbage=4, deflate=True)
     return output_path
 

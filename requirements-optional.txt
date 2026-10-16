@@ -1,0 +1,22 @@
+# Optional local backends. ihatepdf works without any of these; installing them
+# unlocks the features noted below.
+#
+#   pyhanko      -> cryptographic signatures: 'sign', 'verify-signatures'
+#                   (the CLI, desktop tool and core.sign module)
+#   cryptography -> reading/writing certificates; pyhanko depends on it, listed
+#                   explicitly because the test-suite generates certificates
+#
+# OCR needs the Tesseract *binary*, not a Python package — PyMuPDF drives it
+# directly. Install it per-platform:
+#   Windows        winget install UB-Mannheim.TesseractOCR
+#   macOS          brew install tesseract
+#   Debian/Ubuntu  apt-get install tesseract-ocr
+#
+# PDF <-> DOCX/Office conversion uses an installed LibreOffice:
+#   Windows        winget install TheDocumentFoundation.LibreOffice
+#   macOS          brew install --cask libreoffice
+#   Debian/Ubuntu  apt-get install libreoffice
+# The PDF -> DOCX direction still works without it via the built-in writer.
+
+pyhanko>=0.30
+cryptography>=42
