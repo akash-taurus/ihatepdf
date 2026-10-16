@@ -18,8 +18,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6", reason="optional GUI dependency")
 
-from PySide6.QtCore import Qt  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
+try:
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+except ImportError as exc:  # pragma: no cover - depends on the host system
+    # PySide6 can be installed and still unusable: on a bare Linux runner Qt
+    # needs the system GL/font libraries. Skip rather than fail the collection.
+    pytest.skip(f"PySide6 is installed but Qt cannot load here: {exc}", allow_module_level=True)
 
 from app import tools as app_tools  # noqa: E402
 from app.main import TOOL_SPECS, Main  # noqa: E402

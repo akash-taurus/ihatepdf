@@ -76,6 +76,17 @@ jobs:
       - name: Install dependencies
         run: pip install pymupdf pypdf Pillow PySide6 pytest
 
+      # Qt wheels need these system libraries on a bare runner, otherwise
+      # importing PySide6.QtWidgets fails with "libEGL.so.1: cannot open".
+      - name: Install Qt runtime libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1 libxkbcommon0 libdbus-1-3 libfontconfig1 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xkb1
+
       - name: Run GUI tests (offscreen)
         env:
           QT_QPA_PLATFORM: offscreen
