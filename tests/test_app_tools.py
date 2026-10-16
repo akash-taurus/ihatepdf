@@ -15,7 +15,7 @@ import pytest
 from PIL import Image
 
 from app import tools
-from core import ocr, ops
+from core import convert, ocr, ops
 
 TMP = Path(__file__).parent / "tmp" / "app-tools"
 
@@ -64,9 +64,14 @@ def fixtures() -> dict:
     copy = TMP / "base-copy.pdf"
     copy.write_bytes(base.read_bytes())
 
+    # A real Word document for the DOCX -> PDF tool (the builtin writer makes
+    # one without needing LibreOffice installed at fixture time).
+    docx = convert.pdf_to_docx(str(base), str(TMP / "base.docx"), engine="builtin")
+
     return {
         "pdf": str(base),
         "pdf2": str(copy),
+        "docx": docx["output"],
         "form": form_path,
         "png": str(png),
         "png2": str(png2),
@@ -163,6 +168,8 @@ def _ctx_for(tool: tools.Tool, fixtures: dict, out_dir: Path) -> tools.Ctx:
         values["force"] = True
 
     inputs = [fixtures["form"] if tool.label in FORM_TOOLS else fixtures["pdf"]]
+    if tool.label == "DOCX to PDF":
+        inputs = [fixtures["docx"]]
     if tool.label in tools.MULTI_INPUT:
         inputs = (
             [fixtures["png"], fixtures["png2"]]
@@ -231,9 +238,6 @@ def test_tool_runs_and_produces_output(tool: tools.Tool, fixtures: dict, tmp_pat
         with pytest.raises(RuntimeError, match=NEEDS[tool.label]):
             tool.run(_ctx_for(tool, fixtures, tmp_path))
         return
-    if tool.label in ("DOCX to PDF", "OCR (searchable PDF)", "OCR to text"):
-        pytest.skip(f"real {NEEDS[tool.label]} path is covered by its own test suite")
-
     ctx = _ctx_for(tool, fixtures, tmp_path)
     result = tool.run(ctx)
 

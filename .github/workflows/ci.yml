@@ -55,6 +55,36 @@ jobs:
       - name: Run tests
         run: pytest -q
 
+  # OCR and Office conversion need system binaries. Installing them here means
+  # those features are exercised for real instead of skipping, so a broken
+  # pipeline shows up as a failure rather than an unnoticed skip.
+  backends:
+    name: OCR + LibreOffice
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Install Tesseract and LibreOffice
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends tesseract-ocr libreoffice-writer
+
+      - name: Point PyMuPDF at the Tesseract language data
+        run: |
+          tessdata=$(dirname "$(find /usr/share -name 'eng.traineddata' -print -quit)")
+          echo "TESSDATA_PREFIX=$tessdata" >> "$GITHUB_ENV"
+
+      - name: Run the backend-backed tests
+        run: pytest -q tests/test_ocr.py tests/test_convert.py tests/test_app_tools.py
+
   # The desktop app: PySide6 is a heavy download, so it gets its own job and
   # runs headless via the offscreen Qt platform plugin.
   gui:

@@ -97,6 +97,33 @@ def test_conversion_missing_input_raises():
         convert.pdf_to_docx(str(TMP / "nope.pdf"), str(TMP / "nope.docx"))
 
 
+@pytest.mark.skipif(not convert.libreoffice_available(), reason="LibreOffice is required")
+def test_libreoffice_converts_pdf_to_docx():
+    src = _text_pdf("lo-src.pdf")
+    out = str(TMP / "lo.docx")
+    result = convert.pdf_to_docx(src, out, engine="libreoffice")
+    assert result["engine"] == "libreoffice"
+
+    with ZipFile(out) as zf:
+        assert "word/document.xml" in zf.namelist()
+
+
+@pytest.mark.skipif(not convert.libreoffice_available(), reason="LibreOffice is required")
+def test_round_trip_pdf_docx_pdf_keeps_the_text():
+    """Built-in writer -> LibreOffice -> PDF keeps the words we started with."""
+    src = _text_pdf("round-trip.pdf", pages=1)
+    docx = str(TMP / "round-trip.docx")
+    convert.pdf_to_docx(src, docx, engine="builtin")
+
+    back = str(TMP / "round-trip-back.pdf")
+    convert.file_to_pdf(docx, back)
+
+    assert Path(back).exists()
+    with fitz.open(back) as doc:
+        assert doc.page_count >= 1
+        assert "Hello ihatepdf page 1" in doc[0].get_text("text")
+
+
 def test_pdf_text_pages_and_capabilities():
     src = _text_pdf("caps.pdf", 3)
     assert len(convert.pdf_text_pages(src)) == 3

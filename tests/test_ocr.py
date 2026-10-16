@@ -132,3 +132,45 @@ def test_missing_tesseract_gives_an_actionable_error():
     src = _pdf("needs-tesseract.pdf", text=None)
     with pytest.raises(RuntimeError, match="Tesseract is not installed"):
         ocr.ocr_pdf(src, str(TMP / "no-tess.pdf"))
+
+
+def _scanned_pdf(name: str, words: str = "INVOICE") -> str:
+    """A genuinely image-only PDF: the text is rendered to pixels, then the
+    page is rebuilt from that image so no text layer exists."""
+    TMP.mkdir(exist_ok=True)
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=400)
+    page.insert_text(fitz.Point(60, 200), words, fontsize=64)
+    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+    doc.close()
+
+    scanned = fitz.open()
+    target = scanned.new_page(width=595, height=400)
+    target.insert_image(target.rect, pixmap=pix)
+    path = TMP / name
+    scanned.save(str(path))
+    scanned.close()
+    return str(path)
+
+
+@pytest.mark.skipif(not ocr.tesseract_available(), reason="Tesseract is required for real OCR")
+def test_real_ocr_makes_a_scanned_page_searchable():
+    src = _scanned_pdf("scanned-real.pdf")
+    with fitz.open(src) as doc:
+        assert doc[0].get_text("text").strip() == ""  # nothing to fall back on
+
+    out = str(TMP / "scanned-real-ocr.pdf")
+    result = ocr.ocr_pdf(src, out, dpi=200)
+    assert result["pages_processed"] == 1
+    assert result["words"] > 0
+
+    with fitz.open(out) as doc:
+        recognised = doc[0].get_text("text").upper()
+    assert "INVOICE" in recognised, recognised
+
+
+@pytest.mark.skipif(not ocr.tesseract_available(), reason="Tesseract is required for real OCR")
+def test_real_ocr_text_returns_recognised_content():
+    src = _scanned_pdf("scanned-text-real.pdf", words="RECEIPT")
+    text = ocr.ocr_text(src, dpi=200)
+    assert "RECEIPT" in text.upper(), text

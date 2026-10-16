@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-4c566a)](#install)
 [![Offline](https://img.shields.io/badge/network-100%25%20offline-success)](SECURITY.md)
-[![Tests](https://img.shields.io/badge/tests-127%20passing-brightgreen)](#development)
+[![Tests](https://img.shields.io/badge/tests-131%20passing-brightgreen)](#development)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 **A local-first PDF toolkit for the things you actually do to PDFs** — merge,
@@ -348,7 +348,7 @@ choose **More info → Run anyway**. No installer, no admin rights, no network.
 ```bash
 pip install -r requirements-dev.txt
 black .        # formatting (line length 100, configured in pyproject.toml)
-pytest -q      # 127 tests; optional-backend tests skip when not installed
+pytest -q      # 131 tests; backend-specific tests skip when it is not installed
 ```
 
 The suite is split so it can be run at whatever depth you have installed:
@@ -358,17 +358,19 @@ The suite is split so it can be run at whatever depth you have installed:
 | `tests/test_ops.py` | core document operations, validation, watermark opacity |
 | `tests/test_pagespec.py` | page specs and the reorder parser |
 | `tests/test_forms.py` | creating, listing, filling, validating and flattening fields |
-| `tests/test_ocr.py` | the searchable-layer writer, pipeline wiring, Tesseract errors |
-| `tests/test_convert.py` | built-in DOCX validity, engine selection, LibreOffice errors |
+| `tests/test_ocr.py` | searchable-layer writer, pipeline wiring, real OCR of an image-only scan |
+| `tests/test_convert.py` | built-in DOCX validity, engine selection, real LibreOffice round trip |
 | `tests/test_sign.py` | real signing + verification, tamper detection, stamping |
 | `tests/test_cli.py` | every new command end to end, including exit codes |
 | `tests/test_app_tools.py` | all 27 desktop tools, without Qt |
 | `tests/test_gui.py` | the window and thumbnail pane, offscreen |
 
-CI runs three jobs: **core** (Windows + Linux, Python 3.11/3.13, formatting +
-tests), **optional** (pyHanko signing exercised for real) and **desktop**
-(PySide6, `QT_QPA_PLATFORM=offscreen`). See [CONTRIBUTING.md](CONTRIBUTING.md)
-before opening a pull request.
+CI runs four jobs: **core** (Windows + Linux, Python 3.11/3.13, formatting +
+tests with no optional backends at all), **optional** (pyHanko signing
+exercised for real), **backends** (Tesseract and LibreOffice installed, so OCR
+and the Office round trip run against real binaries rather than skipping) and
+**desktop** (PySide6, `QT_QPA_PLATFORM=offscreen`). See
+[CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 ## Privacy
 
