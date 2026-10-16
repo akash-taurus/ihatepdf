@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# Formatting + tests (runtime deps for tests are already in requirements.txt)
+black>=24.0
