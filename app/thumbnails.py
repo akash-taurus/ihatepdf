@@ -131,6 +131,22 @@ class ThumbnailPane(QWidget):
 
     # -- loading
 
+    def shutdown(self) -> None:
+        """Stop the render thread. Safe to call repeatedly or from closeEvent.
+
+        A QThread that is destroyed while still running aborts the process, so
+        the pane always parks its renderer before going away.
+        """
+        renderer = self._renderer
+        self._renderer = None
+        if renderer is not None:
+            renderer.cancel()
+            renderer.wait(3000)
+
+    def closeEvent(self, event) -> None:  # noqa: D102 - Qt override
+        self.shutdown()
+        super().closeEvent(event)
+
     def load_dialog(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Choose a PDF", "", "PDF (*.pdf)")
         if path:
@@ -141,9 +157,7 @@ class ThumbnailPane(QWidget):
         if not Path(pdf_path).exists():
             self.status.emit(f"No such file: {pdf_path}")
             return
-        if self._renderer is not None:
-            self._renderer.cancel()
-            self._renderer.wait(2000)
+        self.shutdown()
         self.list.clear()
         self._source = pdf_path
         self.header.setText(f"Page order for {Path(pdf_path).name} (drag to rearrange):")

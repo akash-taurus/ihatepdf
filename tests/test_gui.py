@@ -7,6 +7,7 @@ CI matrix fast; a dedicated CI job installs PySide6 and runs them.
 
 from __future__ import annotations
 
+import gc
 import os
 from pathlib import Path
 
@@ -29,10 +30,28 @@ from core import ops  # noqa: E402
 TMP = Path(__file__).parent / "tmp" / "gui"
 
 
+def _drain_qt(app) -> None:
+    """Destroy leftover Qt objects *while the app is alive*.
+
+    Widgets handed to Python's final garbage collector are freed in an
+    arbitrary order during interpreter shutdown, which aborts the process
+    (seen on Windows with PySide6 6.12). Deleting them here, with the
+    QApplication still up, keeps shutdown deterministic.
+    """
+    app.closeAllWindows()
+    for widget in app.topLevelWidgets():
+        widget.deleteLater()
+    for _ in range(3):
+        app.processEvents()
+        gc.collect()
+
+
 @pytest.fixture(scope="module")
 def qt_app():
     app = QApplication.instance() or QApplication([])
     yield app
+    _drain_qt(app)
+    app.quit()
 
 
 @pytest.fixture(scope="module")
@@ -54,8 +73,11 @@ def window(qt_app, samples: dict):
     win.show()  # isVisible() on child widgets needs a shown top-level window
     QApplication.processEvents()
     yield win
+    win.shutdown()
     win.close()
     win.deleteLater()
+    QApplication.processEvents()
+    gc.collect()
 
 
 def test_window_lists_available_tools_and_reports_backends(window):
@@ -147,6 +169,10 @@ def test_thumbnail_pane_loads_pages_and_reorders(qt_app, samples: dict, tmp_path
     pane.move_selection(2)
     pane.save_reordered(str(tmp_path / "reordered2.pdf"))
     assert ops.info(str(tmp_path / "reordered2.pdf"))["pages"] == 4
+
+    pane.shutdown()  # idempotent, and required before the widget goes away
+    assert pane._renderer is None
+    pane.shutdown()
     pane.close()
 
 
@@ -184,6 +210,16 @@ def test_reorder_tool_uses_the_thumbnail_order(window, samples: dict, tmp_path: 
             "gui fixture 2",
             "gui fixture 1",
         ]
+
+
+def test_closing_a_window_with_a_job_in_flight_is_safe(window, samples: dict, tmp_path: Path):
+    window.tools.setCurrentRow(next(i for i, s in enumerate(TOOL_SPECS) if s.label == "Compress"))
+    window.output.setText(str(tmp_path / "closing.pdf"))
+    window._run()  # start the worker, then close the window immediately
+    window.shutdown()
+    assert window._worker is None
+    window.shutdown()  # idempotent
+    assert window.btn_run.isEnabled()
 
 
 def test_worker_reports_failures_and_results():

@@ -496,6 +496,25 @@ class Main(QMainWindow):
             self._append(f"⚠ {label}: {reason}")
         self._append("")
 
+    def shutdown(self) -> None:
+        """Park background work so the window (and process) can close cleanly.
+
+        A job already running is allowed to finish (up to a few seconds) rather
+        than being killed mid-write, and the controls are left in a usable
+        state instead of waiting for a queued signal that may never arrive.
+        """
+        worker = self._worker
+        self._worker = None
+        if worker is not None and worker.isRunning():
+            worker.wait(5000)
+        if worker is not None:
+            self._finished()
+        self.thumbs.shutdown()
+
+    def closeEvent(self, event) -> None:  # noqa: D102 - Qt override
+        self.shutdown()
+        super().closeEvent(event)
+
 
 def main() -> None:
     QApplication.setApplicationName("ihatepdf")

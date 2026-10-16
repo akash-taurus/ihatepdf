@@ -51,9 +51,15 @@ def fixtures() -> dict:
         [{"name": "full_name", "type": "text", "page": 1, "rect": [72, 500, 300, 520]}],
     )
 
-    pfx = ""
+    # Always provide a bundle path: with pyHanko installed this is a real
+    # certificate, without it a placeholder file that lets the tool reach the
+    # "optional dependency missing" error the tests assert on.
+    bundle = TMP / "signer.p12"
     if tools.sign.signing_available():
-        pfx = _make_certificate(TMP / "signer.p12")
+        pfx = _make_certificate(bundle)
+    else:
+        bundle.write_bytes(b"placeholder for a missing optional dependency")
+        pfx = str(bundle)
 
     copy = TMP / "base-copy.pdf"
     copy.write_bytes(base.read_bytes())
@@ -134,11 +140,13 @@ FIELD_VALUES: dict[str, object] = {
 FORM_TOOLS = {"List form fields", "Fill form", "Flatten form"}
 
 #: Tools replaced by a capability error when the optional backend is missing.
+#: These must line up with app.tools.requirements_met().
 NEEDS = {
     "OCR (searchable PDF)": "Tesseract",
     "OCR to text": "Tesseract",
     "DOCX to PDF": "LibreOffice",
     "Sign (PKCS#12)": "pyHanko",
+    "Verify signatures": "pyHanko",
 }
 
 
@@ -179,6 +187,30 @@ def test_every_tool_is_described_and_unique():
         assert tool.output in {"file", "dir", "txt", "docx", "none"}, tool.label
         for field_id in tool.fields:
             assert field_id in FIELD_VALUES, f"{tool.label} uses unknown field {field_id}"
+
+
+def test_backend_requirements_match_the_tool_expectations(monkeypatch):
+    """A tool must not need a backend that NEEDS in this file does not declare."""
+    backends = ("Tesseract", "LibreOffice", "pyHanko")
+
+    def pretend_only(present: set[str]) -> None:
+        monkeypatch.setattr(
+            tools.ocr, "tesseract_available", lambda *a, **k: "Tesseract" in present
+        )
+        monkeypatch.setattr(
+            tools.convert, "libreoffice_available", lambda: "LibreOffice" in present
+        )
+        monkeypatch.setattr(tools.sign, "signing_available", lambda: "pyHanko" in present)
+
+    for tool in tools.TOOLS:
+        for missing_backend in backends:
+            pretend_only({b for b in backends if b != missing_backend})
+            available, _reason = tools.requirements_met(tool.label)
+            expected = NEEDS.get(tool.label) != missing_backend
+            assert available is expected, (
+                f"{tool.label} with {missing_backend} unavailable: "
+                f"requirements_met()={available}, expected {expected}"
+            )
 
 
 def _backend_missing(label: str) -> bool:
@@ -267,6 +299,19 @@ def test_tools_validate_their_options(fixtures: dict, tmp_path: Path):
         run_tool("Stamp image", image="")
     with pytest.raises(ValueError, match="page order"):
         run_tool("Reorder pages", order="")
+
+
+def test_missing_pyhanko_surfaces_the_install_hint(monkeypatch, fixtures: dict, tmp_path: Path):
+    """The no-pyHanko path (as in the lean CI job) must explain itself."""
+    tool = next(t for t in tools.TOOLS if t.label == "Sign (PKCS#12)")
+    ctx = _ctx_for(tool, fixtures, tmp_path)
+
+    def boom():
+        raise RuntimeError(tools.sign.INSTALL_HINT)
+
+    monkeypatch.setattr(tools.sign, "_require_pyhanko", boom)
+    with pytest.raises(RuntimeError, match="pyHanko"):
+        tool.run(ctx)
 
 
 @pytest.mark.skipif(not tools.sign.signing_available(), reason="optional signing dependency")

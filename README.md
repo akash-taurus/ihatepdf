@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-4c566a)](#install)
 [![Offline](https://img.shields.io/badge/network-100%25%20offline-success)](SECURITY.md)
-[![Tests](https://img.shields.io/badge/tests-124%20passing-brightgreen)](#development)
+[![Tests](https://img.shields.io/badge/tests-127%20passing-brightgreen)](#development)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 **A local-first PDF toolkit for the things you actually do to PDFs** — merge,
@@ -348,7 +348,7 @@ choose **More info → Run anyway**. No installer, no admin rights, no network.
 ```bash
 pip install -r requirements-dev.txt
 black .        # formatting (line length 100, configured in pyproject.toml)
-pytest -q      # 124 tests; optional-backend tests skip when not installed
+pytest -q      # 127 tests; optional-backend tests skip when not installed
 ```
 
 The suite is split so it can be run at whatever depth you have installed:
